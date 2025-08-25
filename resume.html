@@ -6,6 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>이력서 양식</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/index.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+
 </head>
 
 <body class="bg-gray-100 py-10">
@@ -30,11 +36,37 @@
           <input type="tel" class="w-full border rounded-lg p-2 focus:ring focus:ring-blue-300" 
           placeholder="010-1234-5678">
         </div>
-        <div>
-          <label class="block text-gray-700 mb-2">이메일</label>
-          <input type="email" class="w-full border rounded-lg p-2 focus:ring focus:ring-blue-300" 
-          placeholder="example@email.com">
-        </div>
+<div>
+  <label class="block text-gray-700 mb-2">이메일</label>
+  <div class="flex gap-2">
+    <!-- 아이디(로컬파트) -->
+    <input id="email-local" type="text"
+           class="flex-1 border rounded-lg p-2 focus:ring focus:ring-blue-300"
+           placeholder="아이디">
+
+    <!-- @ 기호 표시 -->
+    <div class="px-2 py-2 text-gray-500 select-none">@</div>
+
+    <!-- 도메인 선택 -->
+    <select id="email-domain-select"
+            class="w-40 border rounded-lg p-2 focus:ring focus:ring-blue-300">
+      <option value="gmail.com">gmail.com</option>
+      <option value="naver.com">naver.com</option>
+      <option value="daum.net">daum.net</option>
+      <option value="outlook.com">outlook.com</option>
+      <option value="__custom__">직접입력</option>
+    </select>
+
+    <!-- 직접입력용 도메인 인풋(기본 숨김/비활성) -->
+    <input id="email-domain" type="text"
+           class="w-44 border rounded-lg p-2 focus:ring focus:ring-blue-300 hidden"
+           placeholder="example.com" disabled>
+  </div>
+
+  <!-- (선택) 폼 제출용 숨김 통합 값 -->
+  <input id="email" name="email" type="hidden">
+</div>
+
       </div>
     </section>
 
@@ -45,7 +77,10 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <input type="text" class="border rounded-lg p-2 focus:ring focus:ring-blue-300" placeholder="학교명">
           <input type="text" class="border rounded-lg p-2 focus:ring focus:ring-blue-300" placeholder="전공">
-          <input type="text" class="border rounded-lg p-2 focus:ring focus:ring-blue-300" placeholder="졸업년도">
+         <input id="edu-year" type="text"
+  class="border rounded-lg p-2 focus:ring focus:ring-blue-300"
+  placeholder="졸업 (YYYY-MM)" readonly>
+
         </div>
       </div>
     </section>
@@ -91,6 +126,7 @@
 <div id="toast-root" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
 
 <script>
+
   /** ---------- Toast 유틸 ---------- */
   function ensureToastRoot() {
     let root = document.getElementById("toast-root");
@@ -149,8 +185,36 @@
   if (!phoneInput) phoneInput = Array.from(document.querySelectorAll("input[placeholder]")).find(i => i.placeholder.includes("010-"));
 
   // 이메일: type=email 또는 placeholder에 '@'
-  let emailInput = $("#email") || document.querySelector("input[type='email']");
-  if (!emailInput) emailInput = Array.from(document.querySelectorAll("input[placeholder]")).find(i => i.placeholder.includes("@"));
+const emailLocalInput  = document.getElementById("email-local");      // 아이디 부분
+const emailDomainSelect = document.getElementById("email-domain-select"); // 셀렉트박스
+const emailDomainInput = document.getElementById("email-domain");     // 직접입력용
+const emailHidden = document.getElementById("email");                 // 숨김 최종값
+function getSelectedDomain() {
+  if (emailDomainSelect.value === "__custom__") {
+    return (emailDomainInput.value || "").trim();
+  }
+  return emailDomainSelect.value;
+}
+
+function composeEmail() {
+  const local  = (emailLocalInput.value || "").trim();
+  const domain = getSelectedDomain();
+  return local && domain ? `${local}@${domain}` : "";
+}
+
+// '직접입력' 선택 시 입력창 표시/숨김
+emailDomainSelect.addEventListener("change", () => {
+  const custom = emailDomainSelect.value === "__custom__";
+  emailDomainInput.classList.toggle("hidden", !custom);
+  emailDomainInput.disabled = !custom;
+});
+
+// 페이지 최초 상태도 맞춰주기
+(() => {
+  const custom = emailDomainSelect.value === "__custom__";
+  emailDomainInput.classList.toggle("hidden", !custom);
+  emailDomainInput.disabled = !custom;
+})();
 
   // 필요하면 동적으로 id 부여(선택사항)
   if (nameInput && !nameInput.id) nameInput.id = "name";
@@ -159,27 +223,53 @@
   if (emailInput && !emailInput.id) emailInput.id = "email";
 
   /** ---------- 검증 규칙 ---------- */
-  const isThreeChars = (v) => v && v.trim().length === 3;           // 정확히 3글자
-  const phoneRegex   = /^\d{3}-\d{3,4}-\d{4}$/;                      // 000-000-0000 or 000-0000-0000
-  const emailRegex   = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
   function validateName(show=true){
-    if (!nameInput) return false;
-    const ok = isThreeChars(nameInput.value);
-    show && showToast(ok ? "이름 형식이 올바릅니다. (3글자)" : "이름은 정확히 3글자로 입력하세요.", ok?"success":"error");
-    return ok;
+  if (!nameInput) return false;
+  const ok = isAtLeastThree(nameInput.value);
+  if (show) {
+    showToast(ok ? "이름이 올바릅니다 (최소 3글자)." : "이름은 최소 3글자 이상 입력하세요.",
+              ok ? "success" : "error");
   }
+  return ok;
+}
+/** ---------- 검증 규칙 ---------- */
+const isAtLeastThree = (v) => v.trim().length >= 3;              // 이름: 최소 3글자
+const phoneRegex     = /^\d{3}-(?:\d{3}|\d{4})-\d{4}$/;          // 전화: 3-3-4 또는 3-4-4 허용
+const emailRegex     = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;             // 이메일: @와 . 포함
+
+function validateEmail(show = true) {
+  const email = composeEmail();                                  // 아이디 + 도메인 합치기
+  const ok = emailRegex.test(email);
+
+  const emailHidden = document.getElementById("email");
+  if (emailHidden) emailHidden.value = email;
+
+  if (show) {
+    showToast(
+      ok ? "이메일이 올바릅니다." : "이메일 형식을 확인하세요.",
+      ok ? "success" : "error"
+    );
+  }
+  return ok;
+}
   function validatePhone(show=true){
     if (!phoneInput) return false;
     const ok = phoneRegex.test(phoneInput.value.trim());
     show && showToast(ok ? "전화번호 형식이 올바릅니다." : "전화번호는 000-0000-0000 형식으로 입력하세요.", ok?"success":"error");
     return ok;
   }
+
   function validateEmail(show=true){
-    if (!emailInput) return false;
-    const ok = emailRegex.test(emailInput.value.trim());
-    show && showToast(ok ? "이메일 형식이 올바릅니다." : "이메일 형식을 확인하세요.", ok?"success":"error");
-    return ok;
+  const email = composeEmail();
+  const ok = emailRegex.test(email);
+
+  if (show) {
+    showToast(ok ? "이메일이 올바릅니다." : "이메일 형식을 확인하세요.",
+              ok ? "success" : "error");
+  }
+  return ok;
+}
+
   }
   function validateBirth(show=true){
     if (!birthInput) return false;
@@ -191,7 +281,13 @@
   /** ---------- 이벤트 연결 (blur 시 토스트) ---------- */
   nameInput  && nameInput.addEventListener("blur", () => validateName(true));
   phoneInput && phoneInput.addEventListener("blur", () => validatePhone(true));
-  emailInput && emailInput.addEventListener("blur", () => validateEmail(true));
+ document.getElementById("email-local")
+  .addEventListener("blur", () => validateEmail(true));
+
+document.getElementById("email-domain-select")
+  .addEventListener("change", () => validateEmail(true));
+emailDomainInput && emailDomainInput.addEventListener("blur", () => validateEmail(true));
+
   birthInput && birthInput.addEventListener("blur", () => validateBirth(true));
 
   /** ---------- 제출/초기화 버튼 자동 탐지 ---------- */
@@ -207,7 +303,7 @@
     if (okName && okPhone && okEmail && okBirth) {
       showToast("제출 가능한 상태입니다 ✅", "success");
     } else {
-      !okName  && showToast("이름: 3글자 규칙 확인", "error");
+      !okName  && showToast("이름: 3글자 규칙 이상", "error");
       !okPhone && showToast("전화번호: 000-0000-0000", "error");
       !okEmail && showToast("이메일 형식 확인", "error");
       !okBirth && showToast("생년월일 선택", "error");
@@ -219,6 +315,30 @@
 
   // 로드 확인용(원하면 지워도 됨)
   // showToast("토스트 스크립트 로드 완료", "info", 1500);
+  
 </script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const edu = document.getElementById("edu-year");
+  if (!edu) return;
+
+  flatpickr(edu, {
+    locale: "ko",
+    plugins: [
+      new monthSelectPlugin({
+        shorthand: false,         // Jan→1월, Feb→2월
+        dateFormat: "Y-m",        // 값: 2025-08
+        altFormat: "Y년 n월",      // 표시: 2025년 8월
+        theme: "light"
+      })
+    ],
+    minDate: "1980-01",
+    maxDate: "2035-12",
+    allowInput: false,
+    clickOpens: true
+  });
+});
+</script>
+
 </body>
 </html>
