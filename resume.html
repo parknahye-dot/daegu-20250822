@@ -86,5 +86,139 @@
       </button>
     </div>
   </div>
+
+<!-- ✅ 토스트 루트 -->
+<div id="toast-root" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+<script>
+  /** ---------- Toast 유틸 ---------- */
+  function ensureToastRoot() {
+    let root = document.getElementById("toast-root");
+    if (!root) {
+      root = document.createElement("div");
+      root.id = "toast-root";
+      root.className = "fixed top-4 right-4 z-50 space-y-2 pointer-events-none";
+      document.body.appendChild(root);
+    }
+    return root;
+  }
+  function showToast(message, type = "info", duration = 2400) {
+    const root = ensureToastRoot();
+    const base = "pointer-events-auto min-w-[220px] max-w-xs rounded-lg px-4 py-3 shadow-lg text-sm flex items-start gap-2 transition opacity-0 -translate-y-1 bg-white border";
+    const color = {
+      info: "border-gray-200 text-gray-800",
+      success: "border-green-200 text-green-800",
+      error: "border-red-200 text-red-800",
+      warn: "border-amber-200 text-amber-800",
+    }[type] || "border-gray-200 text-gray-800";
+    const icon = { info: "ℹ️", success: "✅", error: "⛔", warn: "⚠️" }[type] || "ℹ️";
+
+    const el = document.createElement("div");
+    el.className = `${base} ${color}`;
+    el.innerHTML = `
+      <span class="mt-0.5">${icon}</span>
+      <div class="flex-1">${message}</div>
+      <button type="button" class="ml-2 text-gray-500 hover:text-gray-700">✖</button>
+    `;
+    const close = () => { el.classList.add("opacity-0","-translate-y-1"); setTimeout(()=>el.remove(),180); };
+    el.querySelector("button").addEventListener("click", close);
+    root.appendChild(el);
+    requestAnimationFrame(()=>{ el.classList.remove("opacity-0","-translate-y-1"); el.classList.add("opacity-100","translate-y-0"); });
+    if (duration > 0) setTimeout(close, duration);
+  }
+
+  /** ---------- 입력 요소 자동 탐지 (id 없어도 동작) ---------- */
+  const $ = (sel) => document.querySelector(sel);
+
+  // 이름: placeholder가 다를 수 있으니 1) id, 2) 이름 라벨 바로 다음 input, 3) 첫 번째 text input 순서로 탐지
+  let nameInput = $("#name");
+  if (!nameInput) {
+    const nameLabel = Array.from(document.querySelectorAll("label")).find(l => l.textContent.trim().startsWith("이름"));
+    if (nameLabel) {
+      const sib = nameLabel.parentElement && nameLabel.parentElement.querySelector("input");
+      if (sib) nameInput = sib;
+    }
+  }
+  if (!nameInput) nameInput = document.querySelector("input[type='text']");
+
+  // 생년월일: date 타입
+  const birthInput = $("#birth") || document.querySelector("input[type='date']");
+
+  // 전화번호: type=tel 또는 placeholder에 '010-'
+  let phoneInput = $("#phone") || document.querySelector("input[type='tel']");
+  if (!phoneInput) phoneInput = Array.from(document.querySelectorAll("input[placeholder]")).find(i => i.placeholder.includes("010-"));
+
+  // 이메일: type=email 또는 placeholder에 '@'
+  let emailInput = $("#email") || document.querySelector("input[type='email']");
+  if (!emailInput) emailInput = Array.from(document.querySelectorAll("input[placeholder]")).find(i => i.placeholder.includes("@"));
+
+  // 필요하면 동적으로 id 부여(선택사항)
+  if (nameInput && !nameInput.id) nameInput.id = "name";
+  if (birthInput && !birthInput.id) birthInput.id = "birth";
+  if (phoneInput && !phoneInput.id) phoneInput.id = "phone";
+  if (emailInput && !emailInput.id) emailInput.id = "email";
+
+  /** ---------- 검증 규칙 ---------- */
+  const isThreeChars = (v) => v && v.trim().length === 3;           // 정확히 3글자
+  const phoneRegex   = /^\d{3}-\d{3,4}-\d{4}$/;                      // 000-000-0000 or 000-0000-0000
+  const emailRegex   = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  function validateName(show=true){
+    if (!nameInput) return false;
+    const ok = isThreeChars(nameInput.value);
+    show && showToast(ok ? "이름 형식이 올바릅니다. (3글자)" : "이름은 정확히 3글자로 입력하세요.", ok?"success":"error");
+    return ok;
+  }
+  function validatePhone(show=true){
+    if (!phoneInput) return false;
+    const ok = phoneRegex.test(phoneInput.value.trim());
+    show && showToast(ok ? "전화번호 형식이 올바릅니다." : "전화번호는 000-0000-0000 형식으로 입력하세요.", ok?"success":"error");
+    return ok;
+  }
+  function validateEmail(show=true){
+    if (!emailInput) return false;
+    const ok = emailRegex.test(emailInput.value.trim());
+    show && showToast(ok ? "이메일 형식이 올바릅니다." : "이메일 형식을 확인하세요.", ok?"success":"error");
+    return ok;
+  }
+  function validateBirth(show=true){
+    if (!birthInput) return false;
+    const ok = !!birthInput.value;
+    show && showToast(ok ? "생년월일 입력 완료." : "생년월일을 선택하세요.", ok?"success":"error");
+    return ok;
+  }
+
+  /** ---------- 이벤트 연결 (blur 시 토스트) ---------- */
+  nameInput  && nameInput.addEventListener("blur", () => validateName(true));
+  phoneInput && phoneInput.addEventListener("blur", () => validatePhone(true));
+  emailInput && emailInput.addEventListener("blur", () => validateEmail(true));
+  birthInput && birthInput.addEventListener("blur", () => validateBirth(true));
+
+  /** ---------- 제출/초기화 버튼 자동 탐지 ---------- */
+  const submitBtn = document.getElementById("submitBtn") || Array.from(document.querySelectorAll("button")).find(b => /제출/.test(b.textContent));
+  const resetBtn  = document.getElementById("resetBtn")  || Array.from(document.querySelectorAll("button")).find(b => /초기화/.test(b.textContent));
+
+  submitBtn && submitBtn.addEventListener("click", () => {
+    const okName  = validateName(false);
+    const okPhone = validatePhone(false);
+    const okEmail = validateEmail(false);
+    const okBirth = validateBirth(false);
+
+    if (okName && okPhone && okEmail && okBirth) {
+      showToast("제출 가능한 상태입니다 ✅", "success");
+    } else {
+      !okName  && showToast("이름: 3글자 규칙 확인", "error");
+      !okPhone && showToast("전화번호: 000-0000-0000", "error");
+      !okEmail && showToast("이메일 형식 확인", "error");
+      !okBirth && showToast("생년월일 선택", "error");
+      showToast("입력값을 확인해 주세요 ⚠️", "warn");
+    }
+  });
+
+  resetBtn && resetBtn.addEventListener("click", () => showToast("양식을 초기화했어요.", "info"));
+
+  // 로드 확인용(원하면 지워도 됨)
+  // showToast("토스트 스크립트 로드 완료", "info", 1500);
+</script>
 </body>
 </html>
